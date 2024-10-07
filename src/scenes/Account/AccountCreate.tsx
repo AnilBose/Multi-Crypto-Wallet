@@ -2,33 +2,22 @@ import React, { useCallback, useEffect, useState } from "react";
 import { generateAccount } from "../../utils/AccountUtils";
 import { Account } from "../../models/Account";
 import AccountDetail from "./AccountDetail";
+import { Chain, CHAINS_CONFIG } from "../../models/Chain";
 
 const recoveryPhraseKeyName = "recoveryPhrase";
 
 function AccountCreate() {
-  // Declare a new state variable, which we'll call "seedphrase"
   const [seedphrase, setSeedphrase] = useState("");
-
-  // Declare a new state variable, which we'll call "account"
   const [account, setAccount] = useState<Account | null>(null);
-
-  // Declare a new state variable, which we'll call "showRecoverInput"
-  // and initialize it to false
   const [showRecoverInput, setShowRecoverInput] = useState(false);
-
-  // Declare new state variables for generated seedphrase and private key
-  const [generatedSeedphrase, setGeneratedSeedphrase] = useState<string | null>(
-    null
-  );
+  const [generatedSeedphrase, setGeneratedSeedphrase] = useState<string | null>(null);
+  const [selectedChain, setSelectedChain] = useState<Chain>(CHAINS_CONFIG['5']); // Default to Goerli
 
   function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
-    // Update the seedphrase state with the value from the text input
     setSeedphrase(event.target.value);
   }
 
-  const handleKeyDown = async (
-    event: React.KeyboardEvent<HTMLInputElement>
-  ) => {
+  const handleKeyDown = async (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.keyCode === 13) {
       event.preventDefault();
       recoverAccount(seedphrase);
@@ -39,24 +28,19 @@ function AccountCreate() {
     // recoverAccount could be used without recoveryPhrase as an arguement but then we would have to
     // put it in a deps array.
     async (recoveryPhrase: string) => {
-      // Call the generateAccount function with no arguments
-      // Call the generateAccount function and pass it 0 and the current seedphrase
-      const result = await generateAccount(recoveryPhrase);
-
-      // Update the account state with the newly recovered account
+      // Call the generateAccount function with the recovery phrase and selected chain
+      const result = await generateAccount(recoveryPhrase, selectedChain);
       setAccount(result.account);
 
       if (localStorage.getItem(recoveryPhraseKeyName) !== recoveryPhrase) {
         localStorage.setItem(recoveryPhraseKeyName, recoveryPhrase);
       }
     },
-    []
+    [selectedChain]
   );
 
   useEffect(() => {
-    const localStorageRecoveryPhrase = localStorage.getItem(
-      recoveryPhraseKeyName
-    );
+    const localStorageRecoveryPhrase = localStorage.getItem(recoveryPhraseKeyName);
     if (localStorageRecoveryPhrase) {
       setSeedphrase(localStorageRecoveryPhrase);
       recoverAccount(localStorageRecoveryPhrase);
@@ -64,39 +48,52 @@ function AccountCreate() {
   }, [recoverAccount]);
 
   async function createAccount() {
-    // Call the generateAccount function with no arguments
-    const result = await generateAccount();
+    const result = await generateAccount("", selectedChain);
     setAccount(result.account);
     setGeneratedSeedphrase(result.seedPhrase);
+  }
+
+  function handleChainChange(event: React.ChangeEvent<HTMLSelectElement>) {
+    const newChain = CHAINS_CONFIG[event.target.value as keyof typeof CHAINS_CONFIG];
+    setSelectedChain(newChain);
+    if (account) {
+      recoverAccount(localStorage.getItem(recoveryPhraseKeyName) || '');
+    } else {
+      setAccount(null);
+      setGeneratedSeedphrase(null);
+    }
   }
 
   return (
     <div className="AccountCreate p-5 m-3 card shadow">
       <h1>Aqua Wallet</h1>
       <form onSubmit={(event) => event.preventDefault()}>
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={createAccount}
-        >
+        <div className="form-group mb-3">
+          <label htmlFor="chainSelect">Select Chain:</label>
+          <select
+            id="chainSelect"
+            className="form-control"
+            value={selectedChain.chainId}
+            onChange={handleChainChange}
+          >
+            {Object.values(CHAINS_CONFIG).map((chain) => (
+              <option key={chain.chainId} value={chain.chainId}>
+                {chain.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button type="button" className="btn btn-primary" onClick={createAccount}>
           Create Account
         </button>
-        {/* Add a button to toggle showing the recover account input and button */}
-        {/* If show recover input is visible, clicking the button again will submit the phrase in the input */}
         <button
           type="button"
           className="btn btn-outline-primary ml-3"
-          onClick={() =>
-            showRecoverInput
-              ? recoverAccount(seedphrase)
-              : setShowRecoverInput(true)
-          }
-          // if the recoveryinput is showing but there is no seedphrase, disable the ability to recover account
+          onClick={() => showRecoverInput ? recoverAccount(seedphrase) : setShowRecoverInput(true)}
           disabled={showRecoverInput && !seedphrase}
         >
           Recover account
         </button>
-        {/* Show the recover account input and button if showRecoverInput is true */}
         {showRecoverInput && (
           <div className="form-group mt-3">
             <input
@@ -113,7 +110,7 @@ function AccountCreate() {
       {account && (
         <>
           <hr />
-          <AccountDetail account={account} />
+          <AccountDetail account={account} selectedChain={selectedChain} />
           {generatedSeedphrase && (
             <div>
               <p>Seedphrase: {generatedSeedphrase}</p>
@@ -125,4 +122,5 @@ function AccountCreate() {
     </div>
   );
 }
+
 export default AccountCreate;
